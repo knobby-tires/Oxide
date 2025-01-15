@@ -1,5 +1,6 @@
 mod cpu;
 use cpu::CPU;
+use cpu::Instruction;
 
 // all possible states a vm can be in 
 #[derive(Debug)] 
@@ -60,7 +61,6 @@ impl VirtualMachine {
         }
     }
 
-
     // write_byte: method to write a byte to memory with bounds checkign
     fn write_byte(&mut self, address: usize, value: u8) -> Result<(), String> {
         if address >= self.memory.len() {
@@ -76,6 +76,26 @@ impl VirtualMachine {
             return Err(format!("Memory address {} out of bounds", address));
         }
         Ok(self.memory[address])
+    }
+
+    fn load_program(&mut self, program: &[Instruction], start_address: u64) -> Result<(), String> {
+        // for now just store program for 1st cpu
+        if self.cpus.is_empty() {
+            return Err("No CPUs available".to_string());
+        }
+
+        let cpu = &mut self.cpus[0];
+        cpu.program_counter = start_address;
+        cpu.running = true;
+
+        // basic execution loop
+        for instruction in program {
+            cpu.execute(*instruction)?;
+            if !cpu.running {
+                break; // stop when hit a halt instruction
+            }
+        }
+        Ok(())
     }
 }
 
@@ -138,5 +158,25 @@ mod tests {
             assert_eq!(cpu.program_counter, 0);
             assert!(!cpu.running);
         }
+    }
+
+    #[test]
+    fn test_program_execution() {
+        let config = VMConfig {
+            memory_size: 1024,
+            num_cpus: 1,
+        };
+        let mut vm = VirtualMachine::new(config);
+        
+        let program = [
+            Instruction::LoadImm { reg: 0, value: 5 },
+            Instruction::LoadImm { reg: 1, value: 7 },
+            Instruction::Add { dest: 2, src: 0 },
+            Instruction::Add { dest: 2, src: 1 },
+            Instruction::Halt,
+        ];
+
+        assert!(vm.load_program(&program, 0).is_ok());
+        assert_eq!(vm.cpus[0].registers[2], 12);  // 5 + 7
     }
 }
